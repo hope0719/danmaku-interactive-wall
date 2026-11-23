@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>现场弹幕墙</title>
+<style>
+  :root{
+    --bg:#05070f;
+    --ink:#eef3ff;
+    --dim:rgba(232,240,255,.55);
+    --card:rgba(16,24,48,.55);
+    --line:rgba(140,170,255,.14);
+    --accent:#7de2ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  .stage{position:fixed;inset:0;display:grid;grid-template-columns:1fr 384px;}
+
+  /* ---------- 背景 ---------- */
+  .bg{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+  .blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.5;animation:drift 22s ease-in-out infinite alternate}
+  .b1{width:46vw;height:46vw;left:-10vw;top:-14vw;background:radial-gradient(circle,#1b6bff,transparent 68%)}
+  .b2{width:40vw;height:40vw;right:6vw;top:-16vw;background:radial-gradient(circle,#8b3cff,transparent 68%);animation-delay:-7s}
+  .b3{width:52vw;height:52vw;left:22vw;bottom:-30vw;background:radial-gradient(circle,#00d4c8,transparent 70%);opacity:.3;animation-delay:-13s}
+  @keyframes drift{
+    from{transform:translate3d(0,0,0) scale(1)}
+    to{transform:translate3d(4vw,3vw,0) scale(1.12)}
+  }
+  .grain{
+    position:absolute;inset:0;opacity:.5;
+    background-image:
+      linear-gradient(rgba(150,180,255,.045) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(150,180,255,.045) 1px,transparent 1px);
+    background-size:64px 64px;
+    mask-image:radial-gradient(ellipse at 40% 40%,#000 20%,transparent 78%);
+  }
+
+  /* ---------- 左侧舞台 ---------- */
+  .main{position:relative;display:flex;flex-direction:column;min-width:0}
+  header{
+    display:flex;align-items:flex-start;justify-content:space-between;
+    padding:30px 40px 0;position:relative;z-index:3;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .live{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:6px 12px;border-radius:999px;
+    border:1px solid rgba(255,90,120,.35);
+    background:rgba(255,60,90,.10);
+    font-size:12px;letter-spacing:.16em;font-weight:600;color:#ff9db0;
+  }
+  .live i{width:7px;height:7px;border-radius:50%;background:#ff5a78;box-shadow:0 0 10px #ff5a78;animation:beat 1.6s infinite}
+  @keyframes beat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.8)}}
+  h1{
+    font-size:clamp(20px,1.7vw,28px);font-weight:700;letter-spacing:.06em;
+    background:linear-gradient(92deg,#ffffff,#a8c8ff 55%,#d8b6ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .clock{font-variant-numeric:tabular-nums;font-size:15px;color:var(--dim);letter-spacing:.12em;padding-top:6px}
+
+  /* ---------- 弹幕轨道 ---------- */
+  .lane-area{
+    position:relative;flex:1;min-height:0;margin:22px 0 0;overflow:hidden;
+    mask-image:linear-gradient(90deg,transparent 0,#000 4%,#000 97%,transparent 100%);
+  }
+  .dm{
+    position:absolute;left:100%;top:0;display:inline-flex;align-items:center;gap:10px;
+    white-space:nowrap;will-change:transform;
+    font-size:clamp(22px,2.05vw,38px);font-weight:600;letter-spacing:.02em;
+    padding:6px 20px 8px;border-radius:999px;
+    background:rgba(12,20,40,.42);
+    border:1px solid rgba(255,255,255,.09);
+    backdrop-filter:blur(6px);
+    box-shadow:0 10px 40px rgba(0,0,0,.28);
+  }
+  .dm .nick{
+    font-size:.62em;font-weight:600;opacity:.72;font-style:normal;
+    padding:3px 10px;border-radius:999px;
+    background:rgba(255,255,255,.1);
+    max-width:9em;overflow:hidden;text-overflow:ellipsis;
+  }
+  .empty{
+    position:absolute;inset:0;display:grid;place-content:center;gap:14px;text-align:center;
+    color:rgba(220,232,255,.42);letter-spacing:.1em;
+    transition:opacity .6s ease;pointer-events:none;
+  }
+  .empty b{display:block;font-size:clamp(20px,1.6vw,26px);font-weight:600;color:rgba(228,238,255,.62)}
+  .empty span{font-size:14px}
+  .empty.gone{opacity:0}
+
+  footer{
+    display:flex;align-items:center;gap:26px;
+    padding:0 40px 26px;position:relative;z-index:3;
+    font-size:13px;color:var(--dim);letter-spacing:.08em;
+  }
+  .num{font-size:26px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:.02em;margin-right:8px}
+  .sep{width:1px;height:26px;background:var(--line)}
+  .dotstate{display:inline-flex;align-items:center;gap:7px}
+  .dotstate i{width:7px;height:7px;border-radius:50%;background:#48e0a4;box-shadow:0 0 10px #48e0a4;transition:.3s}
+  .dotstate.off i{background:#ff7a7a;box-shadow:0 0 10px #ff7a7a}
+  .hint{margin-left:auto;display:flex;align-items:center;gap:10px;color:rgba(210,225,255,.4)}
+  .hint svg{opacity:.6}
+
+  /* ---------- 右侧二维码 ---------- */
+  .side{
+    position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;
+    padding:34px 30px;
+    border-left:1px solid var(--line);
+    background:linear-gradient(180deg,rgba(12,18,38,.55),rgba(8,12,26,.75));
+    backdrop-filter:blur(18px);
+    z-index:4;
+  }
+  .side::before{
+    content:"";position:absolute;inset:0 0 auto;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(125,226,255,.5),transparent);
+  }
+  .qr-shell{
+    position:relative;padding:16px;border-radius:26px;
+    background:#fff;
+    box-shadow:0 20px 60px rgba(80,150,255,.22),0 0 0 1px rgba(255,255,255,.6);
+    animation:float 6s ease-in-out infinite;
+  }
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .qr-shell img{display:block;width:248px;height:248px;border-radius:12px}
+  .qr-shell::after{
+    content:"";position:absolute;inset:-7px;border-radius:33px;
+    border:1px solid rgba(125,226,255,.28);pointer-events:none;
+  }
+  .scan-title{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+  .scan-title b{font-size:20px;font-weight:700;letter-spacing:.08em}
+  .scan-title span{font-size:13px;color:var(--dim);letter-spacing:.14em}
+  .steps{display:flex;gap:8px;margin-top:2px}
+  .step{
+    padding:5px 10px;border-radius:8px;font-size:11px;letter-spacing:.06em;
+    color:rgba(190,215,255,.75);background:rgba(120,170,255,.1);border:1px solid rgba(120,170,255,.16);
+  }
+  .join{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;
+    color:rgba(180,205,255,.5);word-break:break-all;text-align:center;max-width:100%;
+    padding:7px 12px;border-radius:9px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  }
+  .scan-icon{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:46px;height:46px;opacity:.9}
+
+  /* ---------- 停止键 ---------- */
+  .ctrl{
+    display:inline-flex;align-items:center;gap:8px;margin-left:18px;
+    padding:9px 16px;border-radius:999px;
+    border:1px solid rgba(150,190,255,.2);
+    background:rgba(18,28,52,.62);
+    color:rgba(228,240,255,.92);
+    font-family:inherit;font-size:12.5px;font-weight:600;letter-spacing:.08em;
+    cursor:pointer;transition:.2s;backdrop-filter:blur(10px);
+  }
+  .ctrl:hover{border-color:rgba(125,226,255,.48);background:rgba(30,48,84,.78);box-shadow:0 0 26px rgba(95,227,255,.18)}
+  .ctrl:active{transform:translateY(1px)}
+  .ctrl svg{opacity:.78;flex:0 0 auto}
+
+  /* ---------- 词云 ---------- */
+  .cloud{
+    position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+    padding:34px 40px 26px;
+    background:
+      radial-gradient(900px 520px at 18% -10%,rgba(40,110,255,.28),transparent 62%),
+      radial-gradient(760px 480px at 88% 6%,rgba(150,70,255,.26),transparent 62%),
+      radial-gradient(680px 480px at 50% 112%,rgba(0,212,200,.16),transparent 62%),
+      #05070f;
+    opacity:0;visibility:hidden;transform:scale(1.02);
+    transition:opacity .55s ease,transform .55s cubic-bezier(.2,.8,.2,1),visibility .55s;
+  }
+  .cloud.on{opacity:1;visibility:visible;transform:none}
+  .cloud-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
+  .cloud-head h2{
+    font-size:clamp(20px,1.8vw,28px);font-weight:700;letter-spacing:.06em;
+    background:linear-gradient(92deg,#fff,#a8c8ff 55%,#d8b6ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .cloud-head p{margin-top:8px;font-size:13px;letter-spacing:.1em;color:var(--dim)}
+  .cloud-back{
+    display:inline-flex;align-items:center;gap:8px;white-space:nowrap;
+    padding:10px 18px;border-radius:999px;
+    border:1px solid rgba(150,190,255,.22);background:rgba(18,28,52,.7);color:#e6f0ff;
+    font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.06em;
+    cursor:pointer;transition:.2s;
+  }
+  .cloud-back:hover{border-color:rgba(125,226,255,.5);box-shadow:0 0 26px rgba(95,227,255,.2)}
+  .cloud-words{position:relative;flex:1;min-height:0;margin-top:12px;overflow:hidden}
+  .word{
+    position:absolute;transform:translate(-50%,-50%) scale(.82);opacity:0;
+    white-space:nowrap;line-height:1;letter-spacing:.01em;
+    animation:wordIn .65s cubic-bezier(.2,.8,.2,1) forwards;
+    will-change:transform,opacity;
+  }
+  @keyframes wordIn{
+    from{opacity:0;transform:translate(-50%,-50%) scale(.82)}
+    to{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  }
+  .cloud-empty{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    display:none;font-size:15px;letter-spacing:.12em;color:rgba(210,228,255,.4);
+  }
+  .cloud-empty.on{display:block}
+
+  /* ---------- 窄屏 ---------- */
+  @media (max-width:900px){
+    .stage{grid-template-columns:1fr}
+    header{padding:20px 20px 0}
+    footer{padding:0 20px 18px;gap:16px}
+    .hint{display:none}
+    .side{
+      position:fixed;right:14px;bottom:14px;left:auto;top:auto;
+      padding:10px;border-radius:20px;border:1px solid var(--line);
+      flex-direction:row;gap:12px;width:auto;
+    }
+    .side .scan-title,.side .join,.side .steps,.side .scan-icon{display:none}
+    .qr-shell{padding:7px;border-radius:14px;animation:none}
+    .qr-shell img{width:104px;height:104px}
+    .lane-area{margin-top:14px}
+    .ctrl{margin-left:auto;padding:8px 13px;font-size:11.5px}
+    .cloud{padding:20px 18px 18px}
+    .cloud-head h2{font-size:19px}
+    .cloud-head p{font-size:11.5px}
+    .cloud-back{padding:8px 12px;font-size:12px}
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="bg">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="grain"></div>
+  </div>
+
+  <section class="main">
+    <header>
+      <div class="brand">
+        <span class="live"><i></i>LIVE</span>
+        <h1>现场弹幕墙</h1>
+      </div>
+      <div class="clock" id="clock">--:--</div>
+    </header>
+
+    <div class="lane-area" id="laneArea">
+      <div class="empty" id="empty">
+        <b>扫码，把你想说的打在大屏上</b>
+        <span>微信扫一扫右侧二维码 · 不需要连同一个网络</span>
+      </div>
+    </div>
+
+    <footer>
+      <div><span class="num" id="total">0</span>条弹幕已上墙</div>
+      <div class="sep"></div>
+      <div class="dotstate" id="state"><i></i><span id="stateText">实时连接中</span></div>
+      <div class="hint">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/>
+          <rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3h-3zM20 17v4h-3"/>
+        </svg>
+        微信扫一扫，发送即上墙
+      </div>
+      <button class="ctrl" id="cloudBtn" type="button">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>
+        <span id="cloudBtnLabel">停止 · 生成词云</span>
+      </button>
+    </footer>
+  </section>
+
+  <aside class="side">
+    <div class="qr-shell">
+      <img id="qr" alt="扫码发送弹幕" width="248" height="248">
+      <svg class="scan-icon" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity=".18">
+        <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/>
+      </svg>
+    </div>
+    <div class="scan-title">
+      <b>微信扫一扫 · 发弹幕</b>
+      <span>无需加好友，任何网络都能发</span>
+      <div class="steps"><span class="step">① 扫码</span><span class="step">② 打字</span><span class="step">③ 上墙</span></div>
+    </div>
+    <div class="join" id="joinUrl">/send</div>
+  </aside>
+</div>
+
+<div class="cloud" id="cloud">
+  <div class="cloud-head">
+    <div>
+      <h2>本场弹幕 · 词云</h2>
+      <p id="cloudMeta">正在整理…</p>
+    </div>
+    <button class="cloud-back" id="cloudBack" type="button">返回实时弹幕</button>
+  </div>
+  <div class="cloud-words" id="cloudWords">
+    <div class="cloud-empty" id="cloudEmpty">还没有弹幕，先让大家发几条</div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var area = document.getElementById('laneArea');
+  var empty = document.getElementById('empty');
+  var totalEl = document.getElementById('total');
+  var clockEl = document.getElementById('clock');
+  var stateEl = document.getElementById('state');
+  var stateText = document.getElementById('stateText');
+
+  var SPEED = 168;        // 弹幕横向速度 px/s
+  var LANE_GAP = 300;     // 同一轨道两弹幕之间的最小间隔 ms
+  var lanes = [];         // 每条轨道下一次可用时间
+  var rowHeight = 0;
+  var laneCount = 0;
+  var shown = 0;
+  var total = 0;
+
+  var joinUrl = location.origin + '/send';
+  document.getElementById('joinUrl').textContent = joinUrl.replace(/^https?:\/\//, '');
+
+  /* 二维码由服务端生成，保证任何网络下都能扫 */
+  var qr = document.getElementById('qr');
+  qr.src = '/api/qr.png?data=' + encodeURIComponent(joinUrl);
+  qr.addEventListener('error', function () {
+    qr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=640x640&margin=8&data=' + encodeURIComponent(joinUrl);
+  });
+
+  function measure() {
+    var fontSize = Math.min(38, Math.max(22, window.innerWidth * 0.0205));
+    rowHeight = Math.round(fontSize * 2.05);
+    var h = area.clientHeight - 20;
+    laneCount = Math.max(3, Math.floor(h / rowHeight));
+    var next = new Array(laneCount);
+    for (var i = 0; i < laneCount; i++) next[i] = lanes[i] || 0;
+    lanes = next;
+  }
+
+  function pickLane() {
+    var best = 0, bestT = Infinity;
+    for (var i = 0; i < lanes.length; i++) {
+      if (lanes[i] < bestT) { bestT = lanes[i]; best = i; }
+    }
+    return best;
+  }
+
+  function spawn(msg) {
+    if (!laneCount) measure();
+    var el = document.createElement('div');
+    el.className = 'dm';
+    el.style.color = 'hsl(' + msg.hue + ' 96% 80%)';
+    el.style.textShadow = '0 0 24px hsl(' + msg.hue + ' 96% 58% / .55), 0 2px 12px rgba(0,0,0,.55)';
+
+    if (msg.nick) {
+      var n = document.createElement('i');
+      n.className = 'nick';
+      n.textContent = msg.nick;
+      n.style.color = 'hsl(' + msg.hue + ' 90% 88%)';
+      el.appendChild(n);
+    }
+    var t = document.createElement('span');
+    t.textContent = msg.text;
+    el.appendChild(t);
+
+    var lane = pickLane();
+    el.style.top = (lane * rowHeight + 12) + 'px';
+    area.appendChild(el);
+
+    var width = el.offsetWidth;
+    var areaW = area.clientWidth;
+    var travel = areaW + width;
+    var duration = (travel / SPEED) * 1000;
+
+    lanes[lane] = performance.now() + (width / SPEED) * 1000 + LANE_GAP;
+
+    var anim = el.animate(
+      [{ transform: 'translateX(0)' }, { transform: 'translateX(' + (-travel) + 'px)' }],
+      { duration: duration, easing: 'linear' }
+    );
+    anim.onfinish = function () { el.remove(); };
+
+    shown += 1;
+    if (shown === 1) empty.classList.add('gone');
+  }
+
+  function bumpTotal() {
+    total += 1;
+    totalEl.textContent = total;
+  }
+
+  function clearAll() {
+    Array.prototype.slice.call(area.querySelectorAll('.dm')).forEach(function (el) {
+      el.getAnimations().forEach(function (a) { a.cancel(); });
+      el.remove();
+    });
+    lanes = lanes.map(function () { return 0; });
+    total = 0;
+    shown = 0;
+    totalEl.textContent = '0';
+    empty.classList.remove('gone');
+  }
+
+  /* ---------- 停止键 · 词云 ---------- */
+  var cloudEl = document.getElementById('cloud');
+  var cloudWords = document.getElementById('cloudWords');
+  var cloudMeta = document.getElementById('cloudMeta');
+  var cloudEmpty = document.getElementById('cloudEmpty');
+  var cloudBtn = document.getElementById('cloudBtn');
+  var cloudBtnLabel = document.getElementById('cloudBtnLabel');
+  var cloudBack = document.getElementById('cloudBack');
+
+  var CLOUD_HUES = [188, 205, 268, 288, 320, 8, 28, 45, 96, 160];
+  var STOP_WORDS = new Set([
+    '的','了','是','我','你','他','她','它','们','在','有','和','就','不','也','都','很','还','要',
+    '说','这','那','个','上','下','啊','吧','呢','吗','呀','哦','嗯','啦','哈','么','把','被','让',
+    '给','对','从','到','与','或','而','但','又','再','才','更','最','太','挺','会','能','想','去',
+    '来','看','过','着','地','得','里','外','中','没','没有','不是','就是','这个','那个','什么',
+    '怎么','可以','我们','你们','他们','大家','自己','现在','时候','因为','所以','但是','然后',
+    '如果','真的','感觉','觉得','已经','一个','还是','这样','那样','知道','喜欢','今天','明天',
+    '其实','应该','可能','一定','有点','非常','特别','东西','事情','出来','起来','一样','大家',
+    'http','https','www','com','cn','html','jpg','png'
+  ]);
+
+  var segmenter = (typeof Intl !== 'undefined' && Intl.Segmenter)
+    ? new Intl.Segmenter('zh-Hans', { granularity: 'word' })
+    : null;
+
+  var inCloud = false;
+
+  function segment(text) {
+    var out = [];
+    if (segmenter) {
+      for (var s of segmenter.segment(text)) {
+        if (s.isWordLike) out.push(s.segment.toLowerCase());
+      }
+      return out;
+    }
+    text.toLowerCase().split(/[^\p{L}\p{N}]+/u).forEach(function (w) {
+      if (w) out.push(w);
+    });
+    return out;
+  }
+
+  function buildWords(texts) {
+    var counts = new Map();
+    texts.forEach(function (t) {
+      segment(t).forEach(function (w) {
+        if (w.length < 2) return;
+        if (/^\d+$/.test(w)) return;
+        if (STOP_WORDS.has(w)) return;
+        counts.set(w, (counts.get(w) || 0) + 1);
+      });
+    });
+    var list = [];
+    counts.forEach(function (count, text) {
+      list.push({ text: text, count: count });
+    });
+    list.sort(function (a, b) { return b.count - a.count || b.text.length - a.text.length; });
+    return list.slice(0, 120);
+  }
+
+  function hueOf(text) {
+    var h = 0;
+    for (var i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) % 9973;
+    return CLOUD_HUES[h % CLOUD_HUES.length];
+  }
+
+  function buildSeeds(W, H) {
+    var cols = W > 1100 ? 5 : 4;
+    var rows = H > 420 ? 3 : 2;
+    var seeds = [];
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        seeds.push({
+          x: W * (c + 0.5) / cols,
+          y: H * (r + 0.5) / rows
+        });
+      }
+    }
+    var mx = W / 2, my = H * 0.5;
+    seeds.sort(function (a, b) {
+      var da = Math.pow(a.x - mx, 2) + Math.pow(a.y - my, 2);
+      var db = Math.pow(b.x - mx, 2) + Math.pow(b.y - my, 2);
+      return da - db;
+    });
+    return seeds;
+  }
+
+  function findSpot(ww, hh, placed, W, H, seed, maxSteps) {
+    for (var i = 0; i < maxSteps; i++) {
+      var t = i * 0.34;
+      var x = seed.x + Math.cos(t) * (t * 2.3);
+      var y = seed.y + Math.sin(t) * (t * 1.25);
+      var halfW = ww / 2, halfH = hh / 2;
+      if (x - halfW < 8 || x + halfW > W - 8) continue;
+      if (y - halfH < 2 || y + halfH > H - 2) continue;
+      var rect = { x: x - halfW, y: y - halfH, w: ww, h: hh };
+      var hit = false;
+      for (var j = 0; j < placed.length; j++) {
+        var p = placed[j];
+        if (rect.x < p.x + p.w && rect.x + rect.w > p.x &&
+            rect.y < p.y + p.h && rect.y + rect.h > p.y) { hit = true; break; }
+      }
+      if (!hit) return { x: x, y: y };
+    }
+    return null;
+  }
+
+  function renderCloud(list, msgCount) {
+    Array.prototype.slice.call(cloudWords.querySelectorAll('.word')).forEach(function (el) { el.remove(); });
+
+    if (!list.length) {
+      cloudEmpty.classList.add('on');
+      cloudMeta.textContent = '共 ' + msgCount + ' 条弹幕';
+      return;
+    }
+    cloudEmpty.classList.remove('on');
+    cloudMeta.textContent = '共 ' + msgCount + ' 条弹幕 · ' + list.length + ' 个高频词';
+
+    var W = cloudWords.clientWidth;
+    var H = cloudWords.clientHeight;
+    var maxC = list[0].count;
+    var minC = list[list.length - 1].count;
+    // 词越少字号越大，把版面撑开
+    var density = Math.min(1, list.length / 60);
+    var maxFont = Math.min(190, Math.max(96, W * (0.155 - 0.06 * density)));
+    var minFont = Math.max(17, Math.min(28, W * 0.017));
+    var placed = [];
+    var seeds = buildSeeds(W, H);
+
+    list.forEach(function (w, idx) {
+      var ratio = maxC === minC ? 1
+        : (Math.log(w.count) - Math.log(minC)) / (Math.log(maxC) - Math.log(minC));
+      var size = Math.round(minFont + (maxFont - minFont) * Math.pow(ratio, 1.35));
+      var hue = hueOf(w.text);
+
+      var el = document.createElement('span');
+      el.className = 'word';
+      el.textContent = w.text;
+      el.style.fontSize = size + 'px';
+      el.style.fontWeight = size > maxFont * 0.5 ? 800 : 600;
+      el.style.color = 'hsl(' + hue + ' 95% 80%)';
+      el.style.textShadow = '0 0 26px hsl(' + hue + ' 95% 60% / .5)';
+      cloudWords.appendChild(el);
+
+      var ww = el.offsetWidth + 16;
+      var hh = el.offsetHeight + 10;
+
+      // 每个词分到一个不同的起点，先在起点附近找空位，再向外扩散
+      var pos = null;
+      for (var si = 0; si < seeds.length && !pos; si++) {
+        var base = seeds[(idx + si) % seeds.length];
+        var jx = ((idx * 37 + si * 13) % 41) - 20;
+        var jy = ((idx * 23 + si * 7) % 31) - 15;
+        var seed = { x: base.x + jx, y: base.y + jy };
+        pos = findSpot(ww, hh, placed, W, H, seed, 280);
+      }
+      if (!pos) {
+        for (var sj = 0; sj < seeds.length && !pos; sj++) {
+          pos = findSpot(ww, hh, placed, W, H, seeds[sj], 700);
+        }
+      }
+      if (!pos) { el.remove(); return; }
+
+      el.style.left = pos.x + 'px';
+      el.style.top = pos.y + 'px';
+      el.style.animationDelay = (60 + idx * 24) + 'ms';
+      placed.push({ x: pos.x - ww / 2, y: pos.y - hh / 2, w: ww, h: hh });
+    });
+  }
+
+  function showCloud() {
+    if (inCloud) return;
+    inCloud = true;
+
+    Array.prototype.slice.call(area.querySelectorAll('.dm')).forEach(function (el) {
+      el.getAnimations().forEach(function (a) { a.cancel(); });
+      el.remove();
+    });
+    empty.classList.add('gone');
+
+    cloudEl.classList.add('on');
+    cloudBtnLabel.textContent = '恢复实时弹幕';
+    cloudBack.textContent = '返回实时弹幕';
+    cloudMeta.textContent = '正在整理…';
+    cloudEmpty.classList.remove('on');
+
+    fetch('/api/cloud', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!inCloud) return;
+        var texts = (d && d.texts) || [];
+        renderCloud(buildWords(texts), texts.length);
+      })
+      .catch(function () {
+        if (!inCloud) return;
+        cloudMeta.textContent = '数据读取失败，点按钮重试';
+        cloudEmpty.classList.add('on');
+      });
+  }
+
+  function hideCloud() {
+    if (!inCloud) return;
+    inCloud = false;
+    cloudEl.classList.remove('on');
+    Array.prototype.slice.call(cloudWords.querySelectorAll('.word')).forEach(function (el) { el.remove(); });
+    cloudEmpty.classList.remove('on');
+    cloudBtnLabel.textContent = '停止 · 生成词云';
+    cloudBack.textContent = '返回实时弹幕';
+
+    if (total === 0) {
+      empty.classList.remove('gone');
+    } else {
+      empty.classList.add('gone');
+    }
+  }
+
+  // 停止即封场：服务端不再接收新弹幕，然后展示词云
+  function stopWall() {
+    cloudBtnLabel.textContent = '正在停止…';
+    fetch('/api/close', { method: 'POST' })
+      .catch(function () {})
+      .then(function () { showCloud(); });
+  }
+
+  function resumeWall() {
+    hideCloud();
+    fetch('/api/open', { method: 'POST' }).catch(function () {});
+  }
+
+  cloudBtn.addEventListener('click', function () {
+    if (inCloud) resumeWall(); else stopWall();
+  });
+  cloudBack.addEventListener('click', resumeWall);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && inCloud) resumeWall();
+  });
+
+  function connect() {
+    var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var ws = new WebSocket(proto + '//' + location.host + '/ws');
+    var retry = 0;
+
+    ws.onopen = function () {
+      retry = 0;
+      stateEl.classList.remove('off');
+      stateText.textContent = '已连接 · 实时上墙';
+    };
+
+    ws.onmessage = function (e) {
+      var data;
+      try { data = JSON.parse(e.data); } catch (err) { return; }
+
+      if (data.type === 'init') {
+        total = data.total || 0;
+        totalEl.textContent = total;
+        (data.history || []).forEach(function (m) { spawn(m); });
+        if (data.closed) showCloud();
+      } else if (data.type === 'danmaku' && data.message) {
+        if (!inCloud) spawn(data.message);
+        bumpTotal();
+      } else if (data.type === 'clear') {
+        clearAll();
+        hideCloud();
+      } else if (data.type === 'closed') {
+        showCloud();
+      } else if (data.type === 'open') {
+        hideCloud();
+      }
+    };
+
+    ws.onclose = function () {
+      stateEl.classList.add('off');
+      stateText.textContent = '正在重连…';
+      retry = Math.min(retry + 1, 6);
+      setTimeout(connect, retry * 800);
+    };
+
+    ws.onerror = function () { ws.close(); };
+  }
+
+  function tickClock() {
+    var d = new Date();
+    var p = function (n) { return n < 10 ? '0' + n : '' + n; };
+    clockEl.textContent = p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  measure();
+  tickClock();
+  setInterval(tickClock, 10000);
+
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(measure, 180);
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

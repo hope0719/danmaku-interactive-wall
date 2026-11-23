@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>弹幕墙管理台</title>
+<style>
+  :root{
+    --ink:#eef3ff;
+    --dim:rgba(215,230,255,.5);
+    --line:rgba(140,170,255,.16);
+    --card:rgba(16,24,48,.62);
+    --cyan:#5fe3ff;
+    --violet:#9b6bff;
+    --danger:#ff6b81;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100vh;background:#05070f;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    display:flex;justify-content:center;padding:48px 20px;
+    background-image:radial-gradient(900px 500px at 20% -10%,rgba(40,110,255,.22),transparent 65%),
+                     radial-gradient(700px 420px at 90% 0%,rgba(150,70,255,.18),transparent 65%);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{width:100%;max-width:760px}
+  .head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:26px}
+  h1{font-size:24px;font-weight:700;letter-spacing:.04em}
+  h1 small{display:block;margin-top:7px;font-size:12px;font-weight:400;letter-spacing:.14em;color:var(--dim)}
+  .pill{
+    font-size:11px;letter-spacing:.14em;color:#8effc4;border:1px solid rgba(80,230,160,.28);
+    background:rgba(60,220,150,.1);padding:6px 12px;border-radius:999px;white-space:nowrap;
+  }
+  .pill.bad{color:#ffb0b0;border-color:rgba(255,120,120,.3);background:rgba(255,90,90,.1)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:22px}
+  .stat{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;
+    backdrop-filter:blur(12px);
+  }
+  .stat b{display:block;font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+  .stat span{display:block;margin-top:6px;font-size:11.5px;color:var(--dim);letter-spacing:.1em}
+
+  .panel{
+    background:var(--card);border:1px solid var(--line);border-radius:20px;
+    padding:24px;backdrop-filter:blur(14px);
+  }
+  .panel h2{font-size:15px;font-weight:600;letter-spacing:.06em;margin-bottom:8px}
+  .panel p{font-size:13px;line-height:1.75;color:var(--dim)}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+  button{
+    font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.04em;
+    padding:12px 20px;border-radius:12px;border:1px solid var(--line);
+    background:rgba(255,255,255,.06);color:var(--ink);cursor:pointer;transition:.18s;
+  }
+  button:hover{background:rgba(255,255,255,.11)}
+  button:active{transform:translateY(1px)}
+  .danger{background:linear-gradient(96deg,#ff5d73,#ff8a5c);border:0;color:#2a0509}
+  .danger.arming{background:linear-gradient(96deg,#ffd166,#ffb03a);color:#2a1a00}
+  .ghost{color:rgba(210,226,255,.82)}
+  .link{
+    display:inline-flex;align-items:center;gap:6px;text-decoration:none;font-size:13px;
+    color:rgba(180,205,255,.75);padding:10px 4px;
+  }
+  .link:hover{color:#cfe2ff}
+  .tip{
+    margin-top:20px;padding:12px 16px;border-radius:12px;font-size:12.5px;line-height:1.7;
+    background:rgba(95,227,255,.06);border:1px solid rgba(95,227,255,.14);color:rgba(190,220,255,.7);
+  }
+  code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
+    background:rgba(255,255,255,.07);padding:2px 6px;border-radius:5px;
+  }
+  .foot{margin-top:24px;font-size:11.5px;color:rgba(190,210,245,.28);letter-spacing:.08em;text-align:center}
+  @media (max-width:640px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    body{padding:28px 16px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>弹幕墙管理台<small>清屏与拦截状态</small></h1>
+    <span class="pill" id="authState">密钥校验中</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><b id="sTotal">0</b><span>累计上墙</span></div>
+    <div class="stat"><b id="sBlocked">0</b><span>拦截次数</span></div>
+    <div class="stat"><b id="sWords">0</b><span>敏感词条数</span></div>
+    <div class="stat"><b id="sScreens">0</b><span>在线连接</span></div>
+  </div>
+
+  <div class="panel">
+    <h2>清屏</h2>
+    <p>会立刻清空大屏上正在飘的弹幕，并把计数归零。已连接的手机端「刚刚上墙」同步清空，不删除 filter.txt。</p>
+    <div class="actions">
+      <button class="danger" id="clearBtn">清空大屏</button>
+      <a class="link" id="screenLink" href="/" target="_blank">打开大屏 ↗</a>
+      <a class="link" id="sendLink" href="/send" target="_blank">打开发送页 ↗</a>
+    </div>
+    <div class="tip">
+      敏感词在项目根目录 <code>filter.txt</code> 中维护，一行一个词，保存后约 1 秒生效，无需重启。命中的弹幕会直接拒绝发送，不会出现在大屏。
+    </div>
+  </div>
+
+  <div class="foot">密钥不会出现在页面源码里，访问时请保留地址中的 key 参数</div>
+</div>
+
+<script>
+(function () {
+  var key = new URLSearchParams(location.search).get('key') || '';
+  var authState = document.getElementById('authState');
+  var clearBtn = document.getElementById('clearBtn');
+  var arming = false;
+  var armTimer;
+
+  document.getElementById('screenLink').href = '/';
+  document.getElementById('sendLink').href = '/send';
+
+  function headers() { return { 'x-admin-key': key }; }
+
+  function setAuth(ok, text) {
+    authState.textContent = text;
+    authState.classList.toggle('bad', !ok);
+  }
+
+  function loadStats() {
+    fetch('/api/stats', { headers: headers(), cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.d.ok) { setAuth(false, '密钥无效'); return; }
+        setAuth(true, '已连接 · 密钥有效');
+        document.getElementById('sTotal').textContent = res.d.total;
+        document.getElementById('sBlocked').textContent = res.d.blocked;
+        document.getElementById('sWords').textContent = res.d.words;
+        document.getElementById('sScreens').textContent = res.d.screens;
+      })
+      .catch(function () { setAuth(false, '服务未响应'); });
+  }
+
+  clearBtn.addEventListener('click', function () {
+    if (!arming) {
+      arming = true;
+      clearBtn.classList.add('arming');
+      clearBtn.textContent = '再点一次确认清屏';
+      armTimer = setTimeout(resetArm, 4000);
+      return;
+    }
+    resetArm();
+    clearBtn.disabled = true;
+    fetch('/api/clear', { method: 'POST', headers: headers() })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d.ok) {
+          clearBtn.textContent = '已清屏';
+          setTimeout(function () { clearBtn.textContent = '清空大屏'; }, 1600);
+          loadStats();
+        } else {
+          clearBtn.textContent = '清屏失败';
+        }
+      })
+      .catch(function () { clearBtn.textContent = '清屏失败'; })
+      .finally(function () { clearBtn.disabled = false; });
+  });
+
+  function resetArm() {
+    arming = false;
+    clearTimeout(armTimer);
+    clearBtn.classList.remove('arming');
+    clearBtn.textContent = '清空大屏';
+  }
+
+  loadStats();
+  setInterval(loadStats, 5000);
+})();
+</script>
+</body>
+</html>
